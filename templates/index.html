@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TrainRadar</title>
+
+    <!-- Leaflet CSS - makes the map look correct -->
+    <link 
+      rel="stylesheet" 
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    />
+
+    <style>
+      /* Remove default spacing around the page */
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      /* Make the body fill the whole screen */
+      body {
+        font-family: Arial, sans-serif;
+      }
+
+      /* Top bar */
+      #header {
+        background-color: #1a1a2e;
+        color: white;
+        padding: 15px 20px;
+        font-size: 22px;
+        font-weight: bold;
+      }
+
+      /* Map takes up the rest of the screen */
+      #map {
+        height: calc(100vh - 55px);
+        width: 100%;
+      }
+    </style>
+
+  </head>
+  <body>
+
+    <!-- Top bar -->
+    <div id="header">
+      🚆 TrainRadar — Live UK Train Map
+    </div>
+
+    <!-- The map will appear inside this div -->
+    <div id="map"></div>
+
+    <!-- Leaflet JavaScript - the actual map library -->
+    <script 
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js">
+    </script>
+
+    <script>
+      // Create the map inside the div with id="map"
+      // 54.5, -3.5 are the coordinates of the centre of the UK
+      // 6 is the zoom level (higher = more zoomed in)
+      var map = L.map('map').setView([54.5, -3.5], 6);
+
+      // Add the OpenStreetMap tiles (the actual map images)
+      // This loads map images from OpenStreetMap's servers
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors'
+      }).addTo(map);
+
+      // Add a test marker at London
+      // 51.5074 = latitude of London, -0.1278 = longitude
+      var londonMarker = L.marker([51.5074, -0.1278]).addTo(map);
+      
+      // Add a popup that appears when you click the marker
+      londonMarker.bindPopup(
+        '<b>London</b><br>TrainRadar test marker'
+      ).openPopup();
+
+    </script>
+
+  </body>
+</html>
