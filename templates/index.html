@@ -200,23 +200,60 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
     <script>
-      // ── Set up the map ──
-      var map = L.map('map').setView([54.5, -3.5], 6);
+    // ── Set up the map ──
+    var map = L.map('map').setView([54.5, -3.5], 6);
 
-      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap contributors'
-      }).addTo(map);
+    }).addTo(map);
 
-      // ── Search for a station ──
-      function searchStation() {
-        // Get what the user typed
+    // ── Custom train station icon ──
+    var stationIcon = L.divIcon({
+        className: '',
+        html: '<div style="width:10px;height:10px;background:#e94560;border:2px solid white;border-radius:50%;"></div>',
+        iconSize: [10, 10],
+        iconAnchor: [5, 5]
+    });
+
+    // ── Load and place station markers ──
+    fetch('/api/stations')
+        .then(function(response) { return response.json(); })
+        .then(function(stations) {
+            stations.forEach(function(station) {
+
+                // Create a marker for each station
+                var marker = L.marker(
+                    [station.lat, station.lng],
+                    {icon: stationIcon}
+                ).addTo(map);
+
+                // When clicked, search for trains at that station
+                marker.on('click', function() {
+                    // Fill in the search box with the station code
+                    document.getElementById('station-input').value = station.crs;
+                    // Trigger the search automatically
+                    searchStation();
+                    // Pan map to that station
+                    map.setView([station.lat, station.lng], 10);
+                });
+
+                // Show station name on hover
+                marker.bindTooltip(station.name, {
+                    permanent: false,
+                    direction: 'top'
+                });
+            });
+        });
+
+    // ── Search for a station ──
+    function searchStation() {
         var code = document.getElementById('station-input').value.trim().toUpperCase();
 
         if (!code) {
-          alert('Please enter a station code e.g. LIV');
-          return;
+            alert('Please enter a station code e.g. LIV');
+            return;
         }
-
+        
         // Show the side panel
         document.getElementById('side-panel').classList.add('visible');
         document.getElementById('panel-title').textContent = 'Loading...';
@@ -226,29 +263,24 @@
         // Call our Flask API endpoint
         // fetch() sends a request to our own Flask server
         fetch('/api/trains/' + code)
-          .then(function(response) {
-            return response.json();
-          })
-          .then(function(data) {
-            if (data.error) {
-              document.getElementById('status-msg').textContent =
-                'Error: ' + data.error;
-              return;
-            }
-            // Display the trains
-            displayTrains(data);
-          })
-          .catch(function(error) {
-            document.getElementById('status-msg').textContent =
-              'Could not connect to server.';
-          });
-      }
+            .then(function(response) { return response.json(); })
+            .then(function(data) {
+                if (data.error) {
+                    document.getElementById('status-msg').textContent =
+                        'Error: ' + data.error;
+                    return;
+                }
+                displayTrains(data);
+            })
+            .catch(function(error) {
+                document.getElementById('status-msg').textContent =
+                    'Could not connect to server.';
+            });
+    }
 
-      // ── Display trains in the side panel ──
-      function displayTrains(data) {
-        // Update panel title with station name
-        document.getElementById('panel-title').textContent =
-          data.station;
+    // ── Display trains in the side panel ──
+    function displayTrains(data) {
+        document.getElementById('panel-title').textContent = data.station;
         document.getElementById('status-msg').textContent = '';
 
         var trains = data.trains;
@@ -256,46 +288,45 @@
         content.innerHTML = '';
 
         if (trains.length === 0) {
-          document.getElementById('status-msg').textContent =
-            'No departures found right now.';
-          return;
+            document.getElementById('status-msg').textContent =
+                'No departures found right now.';
+            return;
         }
 
         // Build a card for each train
         trains.forEach(function(train) {
-          // Check if train is late
-          var isLate = train.actual !== train.scheduled;
-          var timeClass = isLate ? 'late' : 'on-time';
-          var timeLabel = isLate
-            ? train.scheduled + ' → ' + train.actual + ' (late)'
-            : train.scheduled + ' (on time)';
+            var isLate = train.actual !== train.scheduled;
+            var timeClass = isLate ? 'late' : 'on-time';
+            var timeLabel = isLate
+                ? train.scheduled + ' → ' + train.actual + ' (late)'
+                : train.scheduled + ' (on time)';
 
-          var card = document.createElement('div');
-          card.className = 'train-card';
-          card.innerHTML =
-            '<div class="train-dest">' + train.destination + '</div>' +
-            '<div class="train-info">' +
-              '<span class="train-time ' + timeClass + '">' + timeLabel + '</span><br>' +
-              'Platform: ' + train.platform + '<br>' +
-              train.operator +
-            '</div>';
+            var card = document.createElement('div');
+            card.className = 'train-card';
+            card.innerHTML =
+                '<div class="train-dest">' + train.destination + '</div>' +
+                '<div class="train-info">' +
+                    '<span class="train-time ' + timeClass + '">' + timeLabel + '</span><br>' +
+                    'Platform: ' + train.platform + '<br>' +
+                    train.operator +
+                '</div>';
 
-          content.appendChild(card);
+            content.appendChild(card);
         });
-      }
+    }
 
-      // ── Close the side panel ──
-      function closePanel() {
+    // ── Close the side panel ──
+    function closePanel() {
         document.getElementById('side-panel').classList.remove('visible');
         document.getElementById('panel-content').innerHTML = '';
-      }
+    }
 
-      // ── Allow pressing Enter to search ──
-      document.getElementById('station-input').addEventListener(
+    // ── Allow pressing Enter to search ──
+    document.getElementById('station-input').addEventListener(
         'keypress', function(e) {
-          if (e.key === 'Enter') searchStation();
+            if (e.key === 'Enter') searchStation();
         }
-      );
+    );
     </script>
 
   </body>

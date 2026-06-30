@@ -1,5 +1,6 @@
 from flask import Flask, render_template, jsonify
 from train_api import get_access_token, get_departures
+from stations import STATIONS
 
 app = Flask(__name__)
 
@@ -80,14 +81,21 @@ def get_trains(station_code):
             'operator': operator,
             'platform': platform,
         })
-
-    # Return the data as JSON
+     # Return the data as JSON
     return jsonify({
         'station': data.get('query', {}).get(
             'location', {}
         ).get('description', station_code),
         'trains': trains
     })
+
+@app.route('/api/stations')
+def get_stations():
+    """
+    Returns all station coordinates as JSON
+    The map page uses this to place markers
+    """
+    return jsonify(STATIONS)
 
 if __name__ == '__main__':
     app.run(debug=True)
