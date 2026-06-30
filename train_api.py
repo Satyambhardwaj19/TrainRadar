@@ -51,6 +51,28 @@ def format_time(iso_string):
     except:
         return 'N/A'
 
+def get_service_detail(service_uid, run_date, access_token):
+    """
+    Fetch the full route detail for a specific train service.
+    service_uid = unique ID like 'W34264'
+    run_date = date like '2026-06-30'
+    Returns full list of stops with times
+    """
+    url = f'https://data.rtt.io/gb-nr/service?uniqueIdentity={service_uid}:{run_date}'
+    
+    headers = {
+        'Authorization': f'Bearer {access_token}',
+        'Version': '2026-06-28'
+    }
+
+    response = requests.get(url, headers=headers)
+
+    if response.status_code == 200:
+        return response.json()
+    else:
+        print(f'Service detail error {response.status_code}: {response.text[:200]}')
+        return None
+
 if __name__ == '__main__':
     print('Step 1: Getting access token...')
     access_token = get_access_token()

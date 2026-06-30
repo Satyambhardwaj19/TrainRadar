@@ -298,18 +298,28 @@
             var isLate = train.actual !== train.scheduled;
             var timeClass = isLate ? 'late' : 'on-time';
             var timeLabel = isLate
-                ? train.scheduled + ' → ' + train.actual + ' (late)'
+                ? train.scheduled + ' \u2192 ' + train.actual + ' (late)'
                 : train.scheduled + ' (on time)';
 
             var card = document.createElement('div');
             card.className = 'train-card';
+            card.style.cursor = 'pointer';
+
             card.innerHTML =
                 '<div class="train-dest">' + train.destination + '</div>' +
                 '<div class="train-info">' +
                     '<span class="train-time ' + timeClass + '">' + timeLabel + '</span><br>' +
                     'Platform: ' + train.platform + '<br>' +
                     train.operator +
+                '</div>' +
+                '<div class="position-info" id="pos-' + train.id + '">' +
+                    '<small style="color:#a8b2d8">Click to see live position</small>' +
                 '</div>';
+
+            // When clicked, fetch and show position
+            card.addEventListener('click', function() {
+                fetchPosition(train.id, train.run_date, card);
+            });
 
             content.appendChild(card);
         });
@@ -327,6 +337,55 @@
             if (e.key === 'Enter') searchStation();
         }
     );
+
+    function fetchPosition(serviceId, runDate, card) {
+        var posDiv = document.getElementById('pos-' + serviceId);
+        posDiv.innerHTML = '<small style="color:#a8b2d8">Calculating position...</small>';
+
+        fetch('/api/service/' + serviceId + '/' + runDate)
+            .then(function(r) { return r.json(); })
+            .then(function(pos) {
+                if (pos.error) {
+                    posDiv.innerHTML = '<small style="color:#e94560">' + pos.error + '</small>';
+                    return;
+                }
+                
+                    posDiv.innerHTML =
+                        '<div style="margin-top:10px;border-top:1px solid #0f3460;padding-top:8px">' +
+
+                        '<div style="font-size:12px;color:#4ade80;margin-bottom:8px">⬤ ' + pos.status + '</div>' +
+
+                        '<div style="font-size:12px;color:#a8b2d8;margin-bottom:2px">' +
+                            '🕐 Last stop: <b style="color:white">' + pos.last_station + '</b>' +
+                            (pos.last_time ? ' at ' + pos.last_time : '') +
+                        '</div>' +
+
+                        '<div style="font-size:12px;color:#a8b2d8;margin-bottom:10px">' +
+                            '🎯 Next stop: <b style="color:white">' + pos.next_station + '</b>' +
+                            (pos.next_time ? ' est. ' + pos.next_time : '') +
+                        '</div>' +
+
+                        '<div style="font-size:11px;color:#a8b2d8;margin-bottom:4px">' +
+                            'Between stations: <b style="color:white">' + pos.leg_percent + '%</b>' +
+                        '</div>' +
+                        '<div style="background:#0a1f44;border-radius:4px;height:10px;margin-bottom:10px;border:1px solid #0f3460">' +
+                            '<div style="background:#e94560;width:' + Math.max(pos.leg_percent, 2) + '%;height:10px;border-radius:4px;transition:width 0.5s"></div>' +
+                        '</div>' +
+
+                        '<div style="font-size:11px;color:#a8b2d8;margin-bottom:4px">' +
+                            'Journey complete: <b style="color:white">' + pos.route_percent + '%</b>' +
+                        '</div>' +
+                        '<div style="background:#0a1f44;border-radius:4px;height:10px;border:1px solid #0f3460">' +
+                            '<div style="background:#4ade80;width:' + Math.max(pos.route_percent, 2) + '%;height:10px;border-radius:4px;transition:width 0.5s"></div>' +
+                        '</div>' +
+
+                        '</div>';
+            })
+            .catch(function() {
+                posDiv.innerHTML = '<small style="color:#e94560">Could not fetch position</small>';
+            });
+    }
+
     </script>
 
   </body>
