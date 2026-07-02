@@ -176,6 +176,12 @@
         />
         <button id="search-btn" onclick="searchStation()">Search</button>
       </div>
+      <div id="refresh-indicator" style="
+            font-size:11px;
+            color:#a8b2d8;
+            margin-left:10px;
+            display:none;
+        ">↻ Auto-refreshing every 30s</div>
     </div>
 
     <!-- Main content -->
@@ -200,6 +206,11 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
     <script>
+    // Track which station is currently selected
+    var currentStation = null;
+    // Track the refresh timer so we can cancel it
+    var refreshTimer = null;
+
     // ── Set up the map ──
     var map = L.map('map').setView([54.5, -3.5], 6);
 
@@ -249,6 +260,36 @@
     function searchStation() {
         var code = document.getElementById('station-input').value.trim().toUpperCase();
 
+        // Check code is valid FIRST
+        if (!code) {
+            alert('Please enter a station code e.g. LIV');
+            return;
+        }
+
+        // Check it's only letters
+        if (!/^[A-Za-z]{2,4}$/.test(code)) {
+            alert('Station codes are 2-4 letters only e.g. LIV, MAN, EUS');
+            return;
+        }
+
+        // Only AFTER validation — save station and show indicator
+        currentStation = code;
+        document.getElementById('refresh-indicator').style.display = 'block';
+
+        // Clear any existing refresh timer
+        if (refreshTimer) {
+            clearInterval(refreshTimer);
+        }
+        
+        // Save the current station for auto-refresh
+        currentStation = code;
+        document.getElementById('refresh-indicator').style.display = 'block';
+
+        // Clear any existing refresh timer before starting a new one
+        if (refreshTimer) {
+            clearInterval(refreshTimer);
+        }
+
         if (!code) {
             alert('Please enter a station code e.g. LIV');
             return;
@@ -273,8 +314,42 @@
                 displayTrains(data);
             })
             .catch(function(error) {
-                document.getElementById('status-msg').textContent =
-                    'Could not connect to server.';
+                document.getElementById('status-msg').innerHTML =
+                    '<span style="color:#e94560">⚠️ Could not connect to server.<br>' +
+                    '<small>Check your internet connection and try again.</small></span>';
+                document.getElementById('panel-title').textContent = 'Error';
+            });
+        
+        // Start auto-refresh every 30 seconds
+        refreshTimer = setInterval(function() {
+            if (currentStation) {
+                console.log('Auto-refreshing trains for: ' + currentStation);
+                // Silently refresh without resetting the panel
+                silentRefresh(currentStation);
+            }
+        }, 30000);
+    }
+
+    function silentRefresh(code) {
+        // Refreshes train data without resetting the whole panel. This runs in the background every 30 seconds.
+        fetch('/api/trains/' + code)
+            .then(function(response) { return response.json(); })
+            .then(function(data) {
+                if (data.error) return;
+                // Update the panel title with refresh indicator
+                document.getElementById('panel-title').textContent =
+                    data.station + ' ↻';
+                // Remove the refresh indicator after 2 seconds
+                setTimeout(function() {
+                    document.getElementById('panel-title').textContent =
+                        data.station;
+                }, 2000);
+                // Update train list
+                displayTrains(data);
+            })
+            .catch(function() {
+                // Silently fail - don't show error on background refresh
+                console.log('Background refresh failed - will retry in 30s');
             });
     }
 
@@ -327,8 +402,16 @@
 
     // ── Close the side panel ──
     function closePanel() {
+        // Stop auto-refresh when panel closes
+        if (refreshTimer) {
+            clearInterval(refreshTimer);
+            refreshTimer = null;
+        }
+        currentStation = null;
         document.getElementById('side-panel').classList.remove('visible');
         document.getElementById('panel-content').innerHTML = '';
+        document.getElementById('status-msg').textContent = 'Search for a station to see trains.';
+        document.getElementById('refresh-indicator').style.display = 'none';
     }
 
     // ── Allow pressing Enter to search ──

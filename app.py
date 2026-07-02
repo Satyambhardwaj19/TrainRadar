@@ -139,81 +139,105 @@ def home():
 
 @app.route('/api/trains/<station_code>')
 def get_trains(station_code):
-    """
-    This is an API endpoint our map page will call.
-    It fetches live train data and returns it as JSON.
-    
-    Example: visiting /api/trains/LIV returns Liverpool trains
-    Example: visiting /api/trains/MAN returns Manchester trains
-    """
-    global access_token
+    try:
+        # Validate station code - must be 2-4 letters only
+        if not station_code.isalpha() or len(station_code) > 4:
+            return jsonify({
+                'error': 'Invalid station code. Use 2-4 letters e.g. LIV'
+            }), 400
 
-    # Fetch train data from RTT API
-    data = get_departures(station_code.upper(), access_token)
+        fresh_token = get_access_token()
+        if not fresh_token:
+            return jsonify({
+                'error': 'Could not connect to train data service. Try again shortly.'
+            }), 503
+        
+        """
+        This is an API endpoint our map page will call.
+        It fetches live train data and returns it as JSON.
+        
+        Example: visiting /api/trains/LIV returns Liverpool trains
+        Example: visiting /api/trains/MAN returns Manchester trains
+        """
+        global access_token
 
-    if not data:
-        # Return an error if something went wrong
-        return jsonify({'error': 'Could not fetch train data'}), 500
+        # Fetch train data from RTT API
+        data = get_departures(station_code.upper(), access_token)
 
-    # Get list of services
-    services = data.get('services') or []
+        if not data:
+            # Return an error if something went wrong
+            return jsonify({'error': 'Could not fetch train data'}), 500
 
-    # Filter to only departing trains
-    departing = [s for s in services 
-                 if s.get('temporalData', {}).get('departure')]
+        # Get list of services
+        services = data.get('services') or []
 
-    # Build a clean list of trains to send to the browser
-    trains = []
-    for service in departing:
-        temporal = service.get('temporalData', {})
-        departure = temporal.get('departure', {})
-        meta = service.get('scheduleMetadata', {})
-        destinations = service.get('destination', [])
+        # Filter to only departing trains
+        departing = [s for s in services 
+                    if s.get('temporalData', {}).get('departure')]
 
-        # Get destination name
-        dest = 'Unknown'
-        if destinations:
-            dest = destinations[0].get('location', {}).get(
-                'description', 'Unknown'
-            )
+        # Build a clean list of trains to send to the browser
+        trains = []
+        for service in departing:
+            try:
+                temporal = service.get('temporalData', {})
+                departure = temporal.get('departure', {})
+                meta = service.get('scheduleMetadata', {})
+                destinations = service.get('destination', [])
 
-        # Get scheduled time
-        scheduled_raw = departure.get('scheduleAdvertised', '')
-        scheduled = scheduled_raw[11:16] if scheduled_raw else 'N/A'
+                # Get destination name
+                dest = 'Unknown'
+                if destinations:
+                    dest = destinations[0].get('location', {}).get(
+                        'description', 'Unknown'
+                    )
 
-        # Get actual time (use forecast if actual not available yet)
-        actual_raw = (departure.get('realtimeActual') or
-                     departure.get('realtimeForecast') or
-                     scheduled_raw)
-        actual = actual_raw[11:16] if actual_raw else 'N/A'
+                # Get scheduled time
+                scheduled_raw = departure.get('scheduleAdvertised', '')
+                scheduled = scheduled_raw[11:16] if scheduled_raw else 'N/A'
 
-        # Get operator name
-        operator = meta.get('operator', {}).get('name', 'Unknown')
+                # Get actual time (use forecast if actual not available yet)
+                actual_raw = (departure.get('realtimeActual') or
+                            departure.get('realtimeForecast') or
+                            scheduled_raw)
+                actual = actual_raw[11:16] if actual_raw else 'N/A'
 
-        # Get platform
-        platform = service.get('locationMetadata', {}).get(
-            'platform', {}
-        ).get('planned', 'N/A')
+                # Get operator name
+                operator = meta.get('operator', {}).get('name', 'Unknown')
 
-        # Get unique train ID
-        train_id = meta.get('identity', 'Unknown')
+                # Get platform
+                platform = service.get('locationMetadata', {}).get(
+                    'platform', {}
+                ).get('planned', 'N/A')
 
-        trains.append({
-            'id': train_id,
-            'run_date': meta.get('departureDate', ''),
-            'destination': dest,
-            'scheduled': scheduled,
-            'actual': actual,
-            'operator': operator,
-            'platform': platform,
+                # Get unique train ID
+                train_id = meta.get('identity', 'Unknown')
+                run_date = meta.get('departureDate', '')
+
+                trains.append({
+                    'id': train_id,
+                    'run_date': meta.get('departureDate', ''),
+                    'destination': dest,
+                    'scheduled': scheduled,
+                    'actual': actual,
+                    'operator': operator,
+                    'platform': platform,
+                })
+            except Exception:
+                # Skip any individual train that causes an error 
+                continue
+        # Return the data as JSON
+        return jsonify({
+            'station': data.get('query', {}).get(
+                'location', {}
+            ).get('description', station_code),
+            'trains': trains,
+            'count': len(trains)
         })
-     # Return the data as JSON
-    return jsonify({
-        'station': data.get('query', {}).get(
-            'location', {}
-        ).get('description', station_code),
-        'trains': trains
-    })
+
+    except Exception as e:
+        return jsonify({
+            'error': 'An unexpected error occurred. Please try again.'
+        }), 500
 
 @app.route('/api/stations')
 def get_stations():
