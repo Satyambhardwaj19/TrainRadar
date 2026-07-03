@@ -23,22 +23,22 @@ Built as part of my MSc dissertation at the University of Liverpool (COMP702, 20
 ### Main Map View
 > Interactive UK map with station markers. Click any red marker to load live departures.
 
-![Main map view](docs/screenshots/main_map.png)
+![Main map view](output/main_map.png)
 
 ### Live Departure Board
 > Side panel showing real-time departures from Liverpool Lime Street with on time and late indicators.
 
-![Departure board](docs/screenshots/departure_board.png)
+![Departure board](output/departure_board.png)
 
 ### Train Position Calculator
 > Click any train card to see estimated live position, last station, next station, and journey progress bars.
 
-![Train position](docs/screenshots/train_position.png)
+![Train position](output/train_position.png)
 
 ### Delay Alert
 > Set a delay alert on any train. An alert banner appears if the train runs 5+ minutes late.
 
-![Delay alert](docs/screenshots/delay_alert.png)
+![Delay alert](output/delay_alert.png)
 
 ---
 
