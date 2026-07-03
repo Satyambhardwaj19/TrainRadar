@@ -164,6 +164,30 @@
 
   <body>
 
+    <!-- Delay alert banner - hidden by default -->
+    <div id="alert-banner" style="
+        display: none;
+        background: #e94560;
+        color: white;
+        padding: 10px 20px;
+        font-size: 14px;
+        text-align: center;
+        position: relative;
+        z-index: 1000;
+    ">
+        <span id="alert-message"></span>
+        <button onclick="dismissAlert()" style="
+            margin-left: 15px;
+            background: white;
+            color: #e94560;
+            border: none;
+            border-radius: 4px;
+            padding: 3px 10px;
+            cursor: pointer;
+            font-weight: bold;
+        ">Dismiss</button>
+    </div>
+
     <!-- Header -->
     <div id="header">
       <h1>🚆 TrainRadar</h1>
@@ -210,7 +234,12 @@
     var currentStation = null;
     // Track the refresh timer so we can cancel it
     var refreshTimer = null;
+    // List of trains the user is watching for delays
+    // Each item: { id, destination, scheduled, operator, stationCode }
+    var watchedTrains = [];
 
+    // How many minutes late counts as a delay
+    var DELAY_THRESHOLD_MINUTES = 5;
     // ── Set up the map ──
     var map = L.map('map').setView([54.5, -3.5], 6);
 
@@ -328,6 +357,10 @@
                 silentRefresh(currentStation);
             }
         }, 30000);
+        // Start delay checking every 30 seconds
+        setInterval(function() {
+            checkDelays();
+        }, 30000);
     }
 
     function silentRefresh(code) {
@@ -376,28 +409,151 @@
                 ? train.scheduled + ' \u2192 ' + train.actual + ' (late)'
                 : train.scheduled + ' (on time)';
 
+            // Check if this train is already being watched
+            var isWatched = watchedTrains.some(function(w) {
+                return w.id === train.id;
+            });
+            var bellStyle = isWatched
+                ? 'color:#e94560;font-size:16px;cursor:pointer;background:none;border:none;float:right'
+                : 'color:#a8b2d8;font-size:16px;cursor:pointer;background:none;border:none;float:right';
+            var bellTitle = isWatched ? 'Stop watching' : 'Alert me if delayed';
+
             var card = document.createElement('div');
             card.className = 'train-card';
             card.style.cursor = 'pointer';
 
             card.innerHTML =
-                '<div class="train-dest">' + train.destination + '</div>' +
+                '<div class="train-dest">' +
+                    train.destination +
+                    '<button ' +
+                        'onclick="toggleWatch(event, \'' + train.id + '\', \'' +
+                        train.destination + '\', \'' + train.scheduled + '\', \'' +
+                        train.operator + '\', \'' + data.station + '\')" ' +
+                        'style="' + bellStyle + '" ' +
+                        'title="' + bellTitle + '">' +
+                        (isWatched ? '🔔' : '🔕') +
+                    '</button>' +
+                '</div>' +
                 '<div class="train-info">' +
                     '<span class="train-time ' + timeClass + '">' + timeLabel + '</span><br>' +
                     'Platform: ' + train.platform + '<br>' +
                     train.operator +
                 '</div>' +
                 '<div class="position-info" id="pos-' + train.id + '">' +
-                    '<small style="color:#a8b2d8">Click to see live position</small>' +
+                    '<small style="color:#a8b2d8">Click card to see live position</small>' +
                 '</div>';
 
-            // When clicked, fetch and show position
-            card.addEventListener('click', function() {
-                fetchPosition(train.id, train.run_date, card);
+            // Click card body to see position (not the bell button)
+            card.addEventListener('click', function(e) {
+                if (e.target.tagName !== 'BUTTON') {
+                    fetchPosition(train.id, train.run_date, card);
+                }
             });
 
             content.appendChild(card);
         });
+    }
+
+    function toggleWatch(event, trainId, destination, scheduled, operator, station) {
+        // Stop the click from also triggering the card click
+        event.stopPropagation();
+
+        // Check if already watching
+        var existingIndex = watchedTrains.findIndex(function(w) {
+            return w.id === trainId;
+        });
+
+        if (existingIndex >= 0) {
+            // Already watching — remove it
+            watchedTrains.splice(existingIndex, 1);
+            console.log('Stopped watching: ' + destination);
+        } else {
+            // Not watching — add it
+            watchedTrains.push({
+                id: trainId,
+                destination: destination,
+                scheduled: scheduled,
+                operator: operator,
+                stationCode: station
+            });
+            console.log('Now watching: ' + destination);
+
+            // Show confirmation
+            showAlert('🔔 Watching ' + destination +
+                ' (' + scheduled + ') — you will be alerted if delayed by ' +
+                DELAY_THRESHOLD_MINUTES + '+ minutes.');
+        }
+
+        // Refresh display to update bell icons
+        if (currentStation) {
+            silentRefresh(currentStation);
+        }
+    }
+
+    function checkDelays() {
+        if (watchedTrains.length === 0) return;
+
+        console.log('Checking delays for ' + watchedTrains.length + ' watched trains...');
+
+        watchedTrains.forEach(function(watched) {
+            // Find what station this train departs from
+            // We need to look it up fresh to get current actual time
+            fetch('/api/trains/' + watched.stationCode)
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (data.error) return;
+
+                    // Find this specific train in the results
+                    var train = data.trains.find(function(t) {
+                        return t.id === watched.id;
+                    });
+
+                    if (!train) return;
+
+                    // Compare scheduled vs actual times
+                    if (train.scheduled === 'N/A' || train.actual === 'N/A') return;
+                    if (train.scheduled === train.actual) return;
+
+                    // Convert times to minutes for comparison
+                    var scheduledMins = timeToMinutes(train.scheduled);
+                    var actualMins = timeToMinutes(train.actual);
+                    var delayMins = actualMins - scheduledMins;
+
+                    // Handle overnight crossings
+                    if (delayMins < -60) delayMins += 1440;
+
+                    if (delayMins >= DELAY_THRESHOLD_MINUTES) {
+                        showAlert(
+                            '⚠️ DELAY: ' + watched.destination +
+                            ' (due ' + watched.scheduled + ') is now ' +
+                            delayMins + ' minutes late. ' +
+                            'New time: ' + train.actual
+                        );
+                    }
+                })
+                .catch(function() {
+                    console.log('Could not check delay for: ' + watched.destination);
+                });
+        });
+    }
+
+    function timeToMinutes(timeStr) {
+        // Convert '14:30' to 870 (minutes since midnight)
+        var parts = timeStr.split(':');
+        return parseInt(parts[0]) * 60 + parseInt(parts[1]);
+    }
+
+    function showAlert(message) {
+        document.getElementById('alert-message').textContent = message;
+        document.getElementById('alert-banner').style.display = 'block';
+        // Auto-hide after 10 seconds
+        setTimeout(function() {
+            document.getElementById('alert-banner').style.display = 'none';
+        }, 10000);
+    }
+
+    function dismissAlert() {
+        document.getElementById('alert-banner').style.display = 'none';
     }
 
     // ── Close the side panel ──
@@ -468,7 +624,8 @@
                 posDiv.innerHTML = '<small style="color:#e94560">Could not fetch position</small>';
             });
     }
-
+    // Start delay checking when page loads
+    setInterval(checkDelays, 30000);
     </script>
 
   </body>
